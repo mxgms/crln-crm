@@ -82,7 +82,6 @@
             border-color: var(--primary-color);
         }
 
-        /* Campo com duplicidade detectada */
         input.duplicado {
             border-color: var(--warn-color);
         }
@@ -219,7 +218,6 @@
             font-size: 12px;
         }
 
-        /* Cabeçalho da busca + botão de atualizar */
         .search-header {
             display: flex;
             justify-content: space-between;
@@ -404,9 +402,8 @@
 
     // =========================================================================
     // CONTROLE DE DUPLICIDADE (e-mail / telefone)
-    // A base completa é mantida em cache no navegador (uma única chamada ao
-    // Apps Script, a mesma busca vazia que já carrega a lista). As verificações
-    // enquanto o usuário digita são locais: não gastam cota do Apps Script.
+    // O cache agora atua como uma barreira preliminar imediata.
+    // A validação definitiva contra concorrência repousa no Backend.
     // =========================================================================
     let clientesCache = [];
     let cacheCarregado = false;
@@ -417,9 +414,7 @@
 
     function normalizarTelefone(v) {
         let d = String(v || '').replace(/\D/g, '');
-        // remove DDI do Brasil quando vier com 55 + DDD + número (12 ou 13 dígitos)
         if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
-        // remove zero de operadora/tronco no início (ex.: 011...)
         if (d.length >= 11 && d.startsWith('0')) d = d.replace(/^0+/, '');
         return d;
     }
@@ -435,7 +430,6 @@
             });
     }
 
-    // Procura um cliente com o mesmo e-mail/telefone, ignorando o próprio registro em edição
     function acharDuplicado(campo) {
         const idAtual = String(document.getElementById('clientId').value || '');
         let valor, chave, normalizar;
@@ -449,7 +443,7 @@
             valor = normalizarTelefone(document.getElementById('telefone').value);
             normalizar = normalizarTelefone;
             chave = 'telefone';
-            if (valor.length < 8) return null; // evita falso positivo com número incompleto
+            if (valor.length < 8) return null; 
         }
 
         return clientesCache.find(c =>
@@ -501,7 +495,6 @@
         el.addEventListener('blur', verificarDuplicidade);
     });
 
-    // Gerenciador de colagem de imagem (Ctrl+V)
     window.addEventListener('paste', function(e) {
         const items = (e.clipboardData || e.originalEvent.clipboardData).items;
         for (let i = 0; i < items.length; i++) {
@@ -521,81 +514,75 @@
         }
     });
 
-    // Envio do formulário (Cadastro ou Atualização)
+    // =========================================================================
+    // SUBMIT OTIZIMADO: Remove overhead desnecessário de request full pré-envio
+    // =========================================================================
     document.getElementById('crmForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const btn = document.getElementById('btnSalvar');
-        btn.innerText = "Verificando duplicidade...";
+        btn.innerText = "Verificando dados...";
         btn.disabled = true;
 
-        // 1) Atualiza a base e confere duplicidade imediatamente antes de salvar
-        //    (pega cadastros feitos por outra pessoa/aba desde que a página abriu).
-        //    Se a atualização falhar, usa o cache que já existe.
-        carregarCache()
-            .catch(err => console.warn('Não foi possível atualizar o cache, usando o existente:', err))
-            .then(() => {
-                const dups = verificarDuplicidade();
-                if (dups.email || dups.telefone) {
-                    const quem = (dups.email || dups.telefone);
-                    alert(
-                        'Registro não salvo: ' +
-                        (dups.email && dups.telefone && dups.email.id !== dups.telefone.id
-                            ? 'e-mail e telefone pertencem a clientes diferentes já cadastrados.'
-                            : `já existe um cliente com este ${dups.email ? 'e-mail' : 'telefone'}: ${quem.nome} (ID ${quem.id}).`) +
-                        '\n\nUse o botão no aviso amarelo para adicionar uma nova interação ao cliente existente.'
-                    );
-                    return null; // aborta o envio
-                }
+        // 1) Usar cache existente para verificação preliminar em milissegundos
+        const dups = verificarDuplicidade();
+        if (dups.email || dups.telefone) {
+            const quem = (dups.email || dups.telefone);
+            alert(
+                'Registro não salvo: ' +
+                (dups.email && dups.telefone && dups.email.id !== dups.telefone.id
+                    ? 'e-mail e telefone pertencem a clientes diferentes já cadastrados.'
+                    : `já existe um cliente com este ${dups.email ? 'e-mail' : 'telefone'}: ${quem.nome} (ID ${quem.id}).`) +
+                '\n\nUse o botão no aviso amarelo para adicionar uma nova interação ao cliente existente.'
+            );
+            btn.innerText = "Salvar Registro";
+            btn.disabled = false;
+            return; // Bloqueia localmente sem gastar rede
+        }
 
-                // 2) Sem duplicidade: envia
-                btn.innerText = "Enviando dados...";
+        // 2) Sem duplicidade local: Delega a responsabilidade definitiva para o servidor
+        btn.innerText = "Enviando dados...";
 
-                const payload = {
-                    id: document.getElementById('clientId').value || null,
-                    nome: document.getElementById('nome').value,
-                    conta: document.getElementById('conta').value,
-                    tipoConta: document.getElementById('tipoConta').value,
-                    email: document.getElementById('email').value,
-                    telefone: document.getElementById('telefone').value,
-                    assunto: document.getElementById('assunto').value,
-                    conversa: document.getElementById('conversa').value,
-                    imageBlob: imageBase64 
-                };
+        const payload = {
+            id: document.getElementById('clientId').value || null,
+            nome: document.getElementById('nome').value,
+            conta: document.getElementById('conta').value,
+            tipoConta: document.getElementById('tipoConta').value,
+            email: document.getElementById('email').value,
+            telefone: document.getElementById('telefone').value,
+            assunto: document.getElementById('assunto').value,
+            conversa: document.getElementById('conversa').value,
+            imageBlob: imageBase64 
+        };
 
-                // ENGENHARIA CONTRA O CORS: Enviar como text/plain
-                return fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'text/plain;charset=utf-8'
-                    },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if(data.status === "success") {
-                        alert('Registro salvo com eficiência.');
-                        resetarFormulario();
-                        carregarCache().then(renderBusca).catch(err => console.warn('Falha ao atualizar a lista:', err)); // Recarrega base e lista
-                    } else {
-                        alert('Falha na operação: ' + data.message);
-                    }
-                });
-            })
-            .catch(error => {
-                console.error('Erro de rede:', error);
-                alert('Erro de comunicação. Verifique se o Apps Script foi implantado como "Qualquer pessoa".');
-            })
-            .finally(() => {
-                btn.innerText = "Salvar Registro";
-                btn.disabled = false;
-            });
+        fetch(WEB_APP_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === "success") {
+                alert('Registro salvo com eficiência.');
+                resetarFormulario();
+                // Apenas aqui recarrega o DB full do servidor
+                carregarCache().then(renderBusca).catch(err => console.warn('Falha ao atualizar a lista:', err));
+            } else {
+                // Caso o backend tenha interceptado uma duplicidade recente não mapeada no frontend
+                alert('Falha na operação: ' + (data.message || 'Erro validando os dados no servidor.'));
+            }
+        })
+        .catch(error => {
+            console.error('Erro de rede:', error);
+            alert('Erro de comunicação. Verifique se o Apps Script foi implantado como "Qualquer pessoa".');
+        })
+        .finally(() => {
+            btn.innerText = "Salvar Registro";
+            btn.disabled = false;
+        });
     });
 
-    // =========================================================================
-    // BUSCA LOCAL (instantânea) sobre a base já carregada em cache.
-    // Pesquisa por nome, empresa, e-mail, telefone, assunto e ID, sem acento e
-    // com várias palavras. Não consome cota do Apps Script a cada tecla.
-    // =========================================================================
     const TIPOS_CONTA = { 'Lead': 'Teste', 'Cliente Ativo': 'Funded', 'Parceiro': 'Não Cliente' };
     const LIMITE_RESULTADOS = 50;
 
@@ -604,8 +591,6 @@
     }
 
     function correspondeBusca(c, tokens) {
-        // Busca ampla em todos os campos do registro, inclusive histórico e anexos.
-        // Mantém a busca sem acentos, sem diferenciar maiúsculas/minúsculas e por múltiplos termos.
         const campos = Object.values(c || {}).map(valor => {
             if (valor == null) return '';
             if (typeof valor === 'object') {
@@ -620,8 +605,6 @@
 
         return tokens.every(t => {
             if (textoCompleto.includes(t)) return true;
-
-            // Para números de telefone/identificadores, ignora pontuação e espaços.
             if (/^[\d\s()+./-]+$/.test(t)) {
                 const digitosBusca = t.replace(/\D/g, '');
                 return digitosBusca.length > 0 && digitosRegistro.includes(digitosBusca);
@@ -659,7 +642,6 @@
         meta.appendChild(linhaMeta('Assunto', item.assunto));
         card.appendChild(meta);
 
-        // Prévia da última interação (o Apps Script grava a mais recente na primeira linha)
         const historico = String(item.conversa || '');
         const ultima = historico.split('\n')[0].trim();
         if (ultima) {
@@ -677,7 +659,6 @@
         const painel = criar('div', 'historico');
         painel.textContent = historico || 'Sem histórico registrado.';
 
-        // Links dos prints (somente URLs https)
         const links = String(item.anexos || '').split(/\s+/).filter(u => u.startsWith('https://'));
         if (links.length) {
             const bloco = criar('div', 'anexos-links');
@@ -717,7 +698,6 @@
         }
 
         const tokens = semAcento(document.getElementById('searchBar').value).trim().split(/\s+/).filter(Boolean);
-        // filter() gera nova lista; reverse() mostra os cadastros mais recentes primeiro
         const filtrados = clientesCache.filter(c => correspondeBusca(c, tokens)).reverse();
 
         resultsList.innerHTML = '';
@@ -741,7 +721,6 @@
         buscaTimeout = setTimeout(renderBusca, 150);
     }
 
-    // Recarrega a base do Google Sheets sob demanda (ex.: outra pessoa cadastrou algo)
     function atualizarBase() {
         const btn = document.getElementById('btnAtualizar');
         btn.disabled = true;
@@ -758,7 +737,6 @@
             });
     }
 
-    // Carregar dados no formulário (Modo Atualização)
     function carregarParaEdicao(item) {
         document.getElementById('clientId').value = item.id;
         document.getElementById('nome').value = item.nome;
@@ -768,22 +746,20 @@
         document.getElementById('telefone').value = item.telefone;
         document.getElementById('assunto').value = item.assunto;
         
-        // Limpamos a conversa para forçar o input do novo log (o histórico antigo fica no Sheets)
         document.getElementById('conversa').value = ""; 
         
         document.getElementById('form-title').innerText = "Adicionando Interação - " + item.nome;
         document.getElementById('btnCancelar').style.display = "block";
-        verificarDuplicidade(); // o próprio cliente é ignorado; limpa avisos anteriores
+        verificarDuplicidade(); 
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // Resetar estado do formulário
     function resetarFormulario() {
         document.getElementById('crmForm').reset();
         document.getElementById('clientId').value = '';
         document.getElementById('form-title').innerText = "Nova Interação";
         document.getElementById('btnCancelar').style.display = "none";
-        verificarDuplicidade(); // limpa os avisos
+        verificarDuplicidade(); 
         
         imageBase64 = "";
         preview.style.display = 'none';
@@ -793,7 +769,6 @@
 
     document.getElementById('btnCancelar').addEventListener('click', resetarFormulario);
 
-    // Carrega todos os clientes ao inicializar a página (também popula o cache de duplicidade)
     window.onload = function() {
         renderBusca();
         carregarCache()
