@@ -604,14 +604,27 @@
     }
 
     function correspondeBusca(c, tokens) {
-        const texto = semAcento([c.nome, c.conta, c.email, c.id, c.assunto, c.telefone].join(' '));
-        const fone = String(c.telefone == null ? '' : c.telefone).replace(/\D/g, '');
+        // Busca ampla em todos os campos do registro, inclusive histórico e anexos.
+        // Mantém a busca sem acentos, sem diferenciar maiúsculas/minúsculas e por múltiplos termos.
+        const campos = Object.values(c || {}).map(valor => {
+            if (valor == null) return '';
+            if (typeof valor === 'object') {
+                try { return JSON.stringify(valor); }
+                catch (_) { return String(valor); }
+            }
+            return String(valor);
+        });
+
+        const textoCompleto = semAcento(campos.join(' '));
+        const digitosRegistro = campos.join(' ').replace(/\D/g, '');
+
         return tokens.every(t => {
-            if (texto.includes(t)) return true;
-            // termo que parece telefone: compara só os dígitos (ignora máscara)
-            if (/^[\d\s()+-]+$/.test(t)) {
-                const dig = t.replace(/\D/g, '');
-                return dig.length >= 3 && fone.includes(dig);
+            if (textoCompleto.includes(t)) return true;
+
+            // Para números de telefone/identificadores, ignora pontuação e espaços.
+            if (/^[\d\s()+./-]+$/.test(t)) {
+                const digitosBusca = t.replace(/\D/g, '');
+                return digitosBusca.length > 0 && digitosRegistro.includes(digitosBusca);
             }
             return false;
         });
