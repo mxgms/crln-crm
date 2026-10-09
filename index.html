@@ -14,6 +14,7 @@
             --primary-color: #4ade80;
             --primary-hover: #22c55e;
             --input-bg: #202024;
+            --warn-color: #fbbf24;
         }
 
         body {
@@ -79,6 +80,41 @@
         input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: var(--primary-color);
+        }
+
+        /* Campo com duplicidade detectada */
+        input.duplicado {
+            border-color: var(--warn-color);
+        }
+
+        .aviso-duplicado {
+            display: none;
+            margin-top: 8px;
+            padding: 10px 12px;
+            background-color: rgba(251, 191, 36, 0.08);
+            border: 1px solid var(--warn-color);
+            border-radius: 6px;
+            color: var(--warn-color);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .aviso-duplicado.visivel {
+            display: block;
+        }
+
+        .aviso-duplicado button {
+            width: auto;
+            margin: 6px 0 0 0;
+            padding: 6px 10px;
+            font-size: 12px;
+            background-color: var(--warn-color);
+            color: #000;
+            display: block;
+        }
+
+        .aviso-duplicado button:hover {
+            background-color: #f59e0b;
         }
 
         textarea {
@@ -182,6 +218,98 @@
             border-radius: 4px;
             font-size: 12px;
         }
+
+        /* Cabeçalho da busca + botão de atualizar */
+        .search-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .search-header h2 {
+            margin: 0;
+            text-align: left;
+        }
+
+        .btn-sec {
+            width: auto;
+            margin: 0;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            background-color: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-sec:hover {
+            background-color: #3a3a42;
+        }
+
+        .contador {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .ultima-interacao {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed var(--border-color);
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .acoes {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .acoes .btn-sec {
+            flex: 1;
+        }
+
+        .historico {
+            display: none;
+            margin-top: 15px;
+            padding: 14px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .historico.aberto {
+            display: block;
+        }
+
+        .anexos-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .anexos-links a {
+            color: var(--primary-color);
+            font-size: 13px;
+            text-decoration: none;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+        }
+
+        .anexos-links a:hover {
+            border-color: var(--primary-color);
+        }
     </style>
 </head>
 <body>
@@ -215,11 +343,13 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div class="form-group">
                     <label for="email">E-mail</label>
-                    <input type="email" id="email" placeholder="joao@email.com">
+                    <input type="email" id="email" placeholder="joao@email.com" autocomplete="off">
+                    <div class="aviso-duplicado" id="avisoEmail"></div>
                 </div>
                 <div class="form-group">
                     <label for="telefone">Telefone</label>
-                    <input type="tel" id="telefone" placeholder="(11) 99999-9999">
+                    <input type="tel" id="telefone" placeholder="(11) 99999-9999" autocomplete="off">
+                    <div class="aviso-duplicado" id="avisoTelefone"></div>
                 </div>
             </div>
 
@@ -247,10 +377,14 @@
     </div>
 
     <div class="card search-section">
-        <h2>Buscar Clientes</h2>
-        <div class="search-box">
-            <input type="text" id="searchBar" placeholder="Pesquise por nome, e-mail ou ID..." oninput="buscarClientes()">
+        <div class="search-header">
+            <h2>Buscar Clientes</h2>
+            <button type="button" class="btn-sec" id="btnAtualizar" onclick="atualizarBase()">Atualizar lista</button>
         </div>
+        <div class="search-box">
+            <input type="text" id="searchBar" placeholder="Pesquise por nome, empresa, e-mail, telefone ou ID..." oninput="buscarClientes()" autocomplete="off">
+        </div>
+        <div class="contador" id="contadorResultados"></div>
         <div class="results-list" id="resultsList">
             <!-- Resultados aparecem aqui dinamicamente -->
         </div>
@@ -266,6 +400,105 @@
     let imageBase64 = "";
     const pasteArea = document.getElementById('pasteArea');
     const preview = document.getElementById('preview');
+
+    // =========================================================================
+    // CONTROLE DE DUPLICIDADE (e-mail / telefone)
+    // A base completa é mantida em cache no navegador (uma única chamada ao
+    // Apps Script, a mesma busca vazia que já carrega a lista). As verificações
+    // enquanto o usuário digita são locais: não gastam cota do Apps Script.
+    // =========================================================================
+    let clientesCache = [];
+    let cacheCarregado = false;
+
+    function normalizarEmail(v) {
+        return String(v || '').trim().toLowerCase();
+    }
+
+    function normalizarTelefone(v) {
+        let d = String(v || '').replace(/\D/g, '');
+        // remove DDI do Brasil quando vier com 55 + DDD + número (12 ou 13 dígitos)
+        if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+        // remove zero de operadora/tronco no início (ex.: 011...)
+        if (d.length >= 11 && d.startsWith('0')) d = d.replace(/^0+/, '');
+        return d;
+    }
+
+    function carregarCache() {
+        return fetch(`${WEB_APP_URL}?q=`)
+            .then(r => r.json())
+            .then(data => {
+                if (!Array.isArray(data)) throw new Error('Resposta inesperada do Apps Script');
+                clientesCache = data;
+                cacheCarregado = true;
+                return clientesCache;
+            });
+    }
+
+    // Procura um cliente com o mesmo e-mail/telefone, ignorando o próprio registro em edição
+    function acharDuplicado(campo) {
+        const idAtual = String(document.getElementById('clientId').value || '');
+        let valor, chave, normalizar;
+
+        if (campo === 'email') {
+            valor = normalizarEmail(document.getElementById('email').value);
+            normalizar = normalizarEmail;
+            chave = 'email';
+            if (!valor) return null;
+        } else {
+            valor = normalizarTelefone(document.getElementById('telefone').value);
+            normalizar = normalizarTelefone;
+            chave = 'telefone';
+            if (valor.length < 8) return null; // evita falso positivo com número incompleto
+        }
+
+        return clientesCache.find(c =>
+            String(c.id) !== idAtual && normalizar(c[chave]) === valor
+        ) || null;
+    }
+
+    function mostrarAviso(campo) {
+        const input = document.getElementById(campo);
+        const aviso = document.getElementById(campo === 'email' ? 'avisoEmail' : 'avisoTelefone');
+        const dup = acharDuplicado(campo);
+
+        aviso.innerHTML = '';
+        if (!dup) {
+            aviso.classList.remove('visivel');
+            input.classList.remove('duplicado');
+            return null;
+        }
+
+        const rotulo = campo === 'email' ? 'E-mail' : 'Telefone';
+        const texto = document.createElement('span');
+        texto.textContent = `${rotulo} já cadastrado para ${dup.nome} (ID ${dup.id}).`;
+        aviso.appendChild(texto);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = 'Adicionar interação a este cliente';
+        btn.addEventListener('click', () => carregarParaEdicao(dup));
+        aviso.appendChild(btn);
+
+        aviso.classList.add('visivel');
+        input.classList.add('duplicado');
+        return dup;
+    }
+
+    function verificarDuplicidade() {
+        return { email: mostrarAviso('email'), telefone: mostrarAviso('telefone') };
+    }
+
+    let duplicidadeTimeout;
+    function agendarVerificacao() {
+        clearTimeout(duplicidadeTimeout);
+        duplicidadeTimeout = setTimeout(verificarDuplicidade, 300);
+    }
+
+    ['email', 'telefone'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('input', agendarVerificacao);
+        el.addEventListener('blur', verificarDuplicidade);
+    });
 
     // Gerenciador de colagem de imagem (Ctrl+V)
     window.addEventListener('paste', function(e) {
@@ -291,91 +524,224 @@
     document.getElementById('crmForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const btn = document.getElementById('btnSalvar');
-        btn.innerText = "Enviando dados...";
+        btn.innerText = "Verificando duplicidade...";
         btn.disabled = true;
 
-        const payload = {
-            id: document.getElementById('clientId').value || null,
-            nome: document.getElementById('nome').value,
-            conta: document.getElementById('conta').value,
-            tipoConta: document.getElementById('tipoConta').value,
-            email: document.getElementById('email').value,
-            telefone: document.getElementById('telefone').value,
-            assunto: document.getElementById('assunto').value,
-            conversa: document.getElementById('conversa').value,
-            imageBlob: imageBase64 
-        };
-
-        // ENGENHARIA CONTRA O CORS: Enviar como text/plain
-        fetch(WEB_APP_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'text/plain;charset=utf-8'
-            },
-            body: JSON.stringify(payload)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === "success") {
-                alert('Registro salvo com eficiência.');
-                resetarFormulario();
-                buscarClientes(); // Recarrega a lista para mostrar a alteração
-            } else {
-                alert('Falha na operação: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Erro de rede:', error);
-            alert('Erro de comunicação. Verifique se o Apps Script foi implantado como "Qualquer pessoa".');
-        })
-        .finally(() => {
-            btn.innerText = "Salvar Registro";
-            btn.disabled = false;
-        });
-    });
-
-    // Função de Busca Otimizada (Debounce para não estourar a cota da API)
-    let searchTimeout;
-    function buscarClientes() {
-        clearTimeout(searchTimeout);
-        const query = document.getElementById('searchBar').value.trim();
-        const resultsList = document.getElementById('resultsList');
-        
-        searchTimeout = setTimeout(() => {
-            resultsList.innerHTML = '<p style="color: var(--text-muted);">Buscando base de dados...</p>';
-            
-            fetch(`${WEB_APP_URL}?q=${encodeURIComponent(query)}`)
-            .then(response => response.json())
-            .then(data => {
-                resultsList.innerHTML = '';
-                if(data.length === 0) {
-                    resultsList.innerHTML = '<p style="color: var(--text-muted);">Nenhum registro encontrado.</p>';
-                    return;
+        // 1) Atualiza a base e confere duplicidade imediatamente antes de salvar
+        //    (pega cadastros feitos por outra pessoa/aba desde que a página abriu).
+        //    Se a atualização falhar, usa o cache que já existe.
+        carregarCache()
+            .catch(err => console.warn('Não foi possível atualizar o cache, usando o existente:', err))
+            .then(() => {
+                const dups = verificarDuplicidade();
+                if (dups.email || dups.telefone) {
+                    const quem = (dups.email || dups.telefone);
+                    alert(
+                        'Registro não salvo: ' +
+                        (dups.email && dups.telefone && dups.email.id !== dups.telefone.id
+                            ? 'e-mail e telefone pertencem a clientes diferentes já cadastrados.'
+                            : `já existe um cliente com este ${dups.email ? 'e-mail' : 'telefone'}: ${quem.nome} (ID ${quem.id}).`) +
+                        '\n\nUse o botão no aviso amarelo para adicionar uma nova interação ao cliente existente.'
+                    );
+                    return null; // aborta o envio
                 }
-                
-                data.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'result-item';
-                    div.innerHTML = `
-                        <div class="result-header">
-                            <span>${item.nome}</span>
-                            <span class="badge">${item.tipoConta}</span>
-                        </div>
-                        <div class="result-meta">
-                            <strong>Empresa:</strong> ${item.conta || '-'} | <strong>ID:</strong> ${item.id}<br>
-                            <strong>Contato:</strong> ${item.email || '-'} | ${item.telefone || '-'}<br>
-                            <strong>Último Assunto:</strong> ${item.assunto || '-'}
-                        </div>
-                        <button onclick='carregarParaEdicao(${JSON.stringify(item).replace(/'/g, "\\'")})' style="padding: 10px; font-size: 14px; margin-top: 15px; background-color: var(--border-color); color: var(--text-color);">Nova Interação com este Cliente</button>
-                    `;
-                    resultsList.appendChild(div);
+
+                // 2) Sem duplicidade: envia
+                btn.innerText = "Enviando dados...";
+
+                const payload = {
+                    id: document.getElementById('clientId').value || null,
+                    nome: document.getElementById('nome').value,
+                    conta: document.getElementById('conta').value,
+                    tipoConta: document.getElementById('tipoConta').value,
+                    email: document.getElementById('email').value,
+                    telefone: document.getElementById('telefone').value,
+                    assunto: document.getElementById('assunto').value,
+                    conversa: document.getElementById('conversa').value,
+                    imageBlob: imageBase64 
+                };
+
+                // ENGENHARIA CONTRA O CORS: Enviar como text/plain
+                return fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if(data.status === "success") {
+                        alert('Registro salvo com eficiência.');
+                        resetarFormulario();
+                        carregarCache().then(renderBusca).catch(err => console.warn('Falha ao atualizar a lista:', err)); // Recarrega base e lista
+                    } else {
+                        alert('Falha na operação: ' + data.message);
+                    }
                 });
             })
             .catch(error => {
-                console.error('Erro na busca:', error);
-                resultsList.innerHTML = '<p style="color: #ff6b6b;">Erro ao carregar resultados. Verifique o console.</p>';
+                console.error('Erro de rede:', error);
+                alert('Erro de comunicação. Verifique se o Apps Script foi implantado como "Qualquer pessoa".');
+            })
+            .finally(() => {
+                btn.innerText = "Salvar Registro";
+                btn.disabled = false;
             });
-        }, 500); 
+    });
+
+    // =========================================================================
+    // BUSCA LOCAL (instantânea) sobre a base já carregada em cache.
+    // Pesquisa por nome, empresa, e-mail, telefone, assunto e ID, sem acento e
+    // com várias palavras. Não consome cota do Apps Script a cada tecla.
+    // =========================================================================
+    const TIPOS_CONTA = { 'Lead': 'Teste', 'Cliente Ativo': 'Funded', 'Parceiro': 'Não Cliente' };
+    const LIMITE_RESULTADOS = 50;
+
+    function semAcento(v) {
+        return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    function correspondeBusca(c, tokens) {
+        const texto = semAcento([c.nome, c.conta, c.email, c.id, c.assunto, c.telefone].join(' '));
+        const fone = String(c.telefone == null ? '' : c.telefone).replace(/\D/g, '');
+        return tokens.every(t => {
+            if (texto.includes(t)) return true;
+            // termo que parece telefone: compara só os dígitos (ignora máscara)
+            if (/^[\d\s()+-]+$/.test(t)) {
+                const dig = t.replace(/\D/g, '');
+                return dig.length >= 3 && fone.includes(dig);
+            }
+            return false;
+        });
+    }
+
+    function criar(tag, classe, texto) {
+        const el = document.createElement(tag);
+        if (classe) el.className = classe;
+        if (texto != null) el.textContent = texto;
+        return el;
+    }
+
+    function linhaMeta(rotulo, valor) {
+        const div = criar('div');
+        div.appendChild(criar('strong', null, rotulo + ': '));
+        div.appendChild(document.createTextNode(valor || '-'));
+        return div;
+    }
+
+    function montarCard(item) {
+        const card = criar('div', 'result-item');
+
+        const header = criar('div', 'result-header');
+        header.appendChild(criar('span', null, item.nome));
+        header.appendChild(criar('span', 'badge', TIPOS_CONTA[item.tipoConta] || item.tipoConta));
+        card.appendChild(header);
+
+        const meta = criar('div', 'result-meta');
+        meta.appendChild(linhaMeta('Empresa', item.conta));
+        meta.appendChild(linhaMeta('ID', item.id));
+        meta.appendChild(linhaMeta('Contato', [item.email, item.telefone].filter(Boolean).join(' | ')));
+        meta.appendChild(linhaMeta('Assunto', item.assunto));
+        card.appendChild(meta);
+
+        // Prévia da última interação (o Apps Script grava a mais recente na primeira linha)
+        const historico = String(item.conversa || '');
+        const ultima = historico.split('\n')[0].trim();
+        if (ultima) {
+            const prev = ultima.length > 160 ? ultima.slice(0, 160) + '…' : ultima;
+            card.appendChild(criar('div', 'ultima-interacao', 'Última interação: ' + prev));
+        }
+
+        const acoes = criar('div', 'acoes');
+
+        const btnInteracao = criar('button', 'btn-sec', 'Nova interação');
+        btnInteracao.type = 'button';
+        btnInteracao.addEventListener('click', () => carregarParaEdicao(item));
+        acoes.appendChild(btnInteracao);
+
+        const painel = criar('div', 'historico');
+        painel.textContent = historico || 'Sem histórico registrado.';
+
+        // Links dos prints (somente URLs https)
+        const links = String(item.anexos || '').split(/\s+/).filter(u => u.startsWith('https://'));
+        if (links.length) {
+            const bloco = criar('div', 'anexos-links');
+            links.forEach((url, i) => {
+                const a = criar('a', null, 'Print ' + (links.length - i));
+                a.href = url;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                bloco.appendChild(a);
+            });
+            painel.appendChild(bloco);
+        }
+
+        if (historico || links.length) {
+            const btnHist = criar('button', 'btn-sec', 'Ver histórico');
+            btnHist.type = 'button';
+            btnHist.addEventListener('click', () => {
+                const aberto = painel.classList.toggle('aberto');
+                btnHist.textContent = aberto ? 'Ocultar histórico' : 'Ver histórico';
+            });
+            acoes.appendChild(btnHist);
+        }
+
+        card.appendChild(acoes);
+        card.appendChild(painel);
+        return card;
+    }
+
+    function renderBusca() {
+        const resultsList = document.getElementById('resultsList');
+        const contador = document.getElementById('contadorResultados');
+
+        if (!cacheCarregado) {
+            resultsList.innerHTML = '<p style="color: var(--text-muted);">Carregando base de dados...</p>';
+            contador.textContent = '';
+            return;
+        }
+
+        const tokens = semAcento(document.getElementById('searchBar').value).trim().split(/\s+/).filter(Boolean);
+        // filter() gera nova lista; reverse() mostra os cadastros mais recentes primeiro
+        const filtrados = clientesCache.filter(c => correspondeBusca(c, tokens)).reverse();
+
+        resultsList.innerHTML = '';
+        if (filtrados.length === 0) {
+            resultsList.innerHTML = '<p style="color: var(--text-muted);">Nenhum registro encontrado.</p>';
+            contador.textContent = '0 de ' + clientesCache.length + ' clientes';
+            return;
+        }
+
+        const visiveis = filtrados.slice(0, LIMITE_RESULTADOS);
+        visiveis.forEach(item => resultsList.appendChild(montarCard(item)));
+
+        contador.textContent = filtrados.length > LIMITE_RESULTADOS
+            ? `Mostrando os ${LIMITE_RESULTADOS} mais recentes de ${filtrados.length} resultados. Refine a busca para ver os demais.`
+            : `${filtrados.length} de ${clientesCache.length} clientes`;
+    }
+
+    let buscaTimeout;
+    function buscarClientes() {
+        clearTimeout(buscaTimeout);
+        buscaTimeout = setTimeout(renderBusca, 150);
+    }
+
+    // Recarrega a base do Google Sheets sob demanda (ex.: outra pessoa cadastrou algo)
+    function atualizarBase() {
+        const btn = document.getElementById('btnAtualizar');
+        btn.disabled = true;
+        btn.textContent = 'Atualizando...';
+        carregarCache()
+            .then(() => { renderBusca(); verificarDuplicidade(); })
+            .catch(err => {
+                console.error('Erro ao atualizar:', err);
+                alert('Não foi possível atualizar a lista agora. Tente novamente em instantes.');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = 'Atualizar lista';
+            });
     }
 
     // Carregar dados no formulário (Modo Atualização)
@@ -393,6 +759,7 @@
         
         document.getElementById('form-title').innerText = "Adicionando Interação - " + item.nome;
         document.getElementById('btnCancelar').style.display = "block";
+        verificarDuplicidade(); // o próprio cliente é ignorado; limpa avisos anteriores
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -402,6 +769,7 @@
         document.getElementById('clientId').value = '';
         document.getElementById('form-title').innerText = "Nova Interação";
         document.getElementById('btnCancelar').style.display = "none";
+        verificarDuplicidade(); // limpa os avisos
         
         imageBase64 = "";
         preview.style.display = 'none';
@@ -411,8 +779,17 @@
 
     document.getElementById('btnCancelar').addEventListener('click', resetarFormulario);
 
-    // Carrega todos os clientes ao inicializar a página
-    window.onload = buscarClientes;
+    // Carrega todos os clientes ao inicializar a página (também popula o cache de duplicidade)
+    window.onload = function() {
+        renderBusca();
+        carregarCache()
+            .then(() => { renderBusca(); verificarDuplicidade(); })
+            .catch(err => {
+                console.error('Erro ao carregar a base:', err);
+                document.getElementById('resultsList').innerHTML =
+                    '<p style="color: #ff6b6b;">Erro ao carregar a base. Clique em "Atualizar lista" para tentar de novo.</p>';
+            });
+    };
 </script>
 </body>
 </html>
