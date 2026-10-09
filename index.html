@@ -565,7 +565,7 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === "success") {
-                alert('Registro salvo com eficiência.');
+                alert('Registro salvo.');
                 resetarFormulario();
                 // Apenas aqui recarrega o DB full do servidor
                 carregarCache().then(renderBusca).catch(err => console.warn('Falha ao atualizar a lista:', err));
