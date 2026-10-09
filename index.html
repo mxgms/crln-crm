@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<link rel="icon" type="image/png" href="goiaba.png">
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRLN LFT - CRM</title>
+    <link rel="icon" type="image/png" href="goiaba.png">
     <style>
         :root {
             --bg-color: #121214;
@@ -37,10 +37,24 @@
             gap: 30px;
         }
 
+        .title-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .title-wrapper img {
+            height: 36px;
+            width: auto;
+            object-fit: contain;
+        }
+
         h2 {
             text-align: center;
             color: var(--primary-color);
-            margin-bottom: 10px;
+            margin: 0; /* Removido margin-bottom para o wrapper assumir */
             font-weight: 600;
         }
 
@@ -315,7 +329,11 @@
 
 <div class="container">
     <div class="card">
-        <h2 id="form-title">CRLN LFT</h2>
+        <div class="title-wrapper">
+            <img src="goiaba.png" alt="Logo Goiaba">
+            <h2 id="form-title">CRLN LFT</h2>
+        </div>
+        
         <form id="crmForm">
             <input type="hidden" id="clientId">
             
@@ -758,7 +776,7 @@
     function resetarFormulario() {
         document.getElementById('crmForm').reset();
         document.getElementById('clientId').value = '';
-        document.getElementById('form-title').innerText = "Nova Interação";
+        document.getElementById('form-title').innerText = "CRLN LFT";
         document.getElementById('btnCancelar').style.display = "none";
         verificarDuplicidade(); 
         
