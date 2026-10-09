@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Minimalista - Dark Mode</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-bg: #1a1a1e;
+            --border-color: #2f2f37;
+            --text-color: #e1e1e6;
+            --text-muted: #a4a4b5;
+            --primary-color: #4ade80;
+            --primary-hover: #22c55e;
+            --input-bg: #202024;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        h2 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 16px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 18px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        textarea {
+            height: 140px;
+            resize: vertical;
+        }
+
+        .paste-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            color: var(--text-muted);
+            background-color: var(--input-bg);
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .paste-area.active {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            background-color: rgba(74, 222, 128, 0.05);
+        }
+
+        .preview-img {
+            max-width: 100%;
+            max-height: 200px;
+            margin-top: 15px;
+            border-radius: 6px;
+            display: none;
+            border: 1px solid var(--border-color);
+        }
+
+        button {
+            width: 100%;
+            padding: 18px;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        /* Seção de Pesquisa */
+        .search-section {
+            border-top: 1px solid var(--border-color);
+            padding-top: 30px;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .results-list {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .result-item {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .result-item:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .result-meta {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .badge {
+            background-color: var(--border-color);
+            color: var(--text-color);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .history-box {
+            background-color: var(--bg-color);
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Formulário Principal Centrado -->
+    <div class="card">
+        <h2 id="form-title">Nova Interação</h2>
+        <form id="crmForm">
+            <input type="hidden" id="clientId">
+            
+            <div class="form-group">
+                <label for="nome">Nome do Cliente</label>
+                <input type="text" id="nome" required placeholder="Ex: João Silva">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="conta">Conta / Empresa</label>
+                    <input type="text" id="conta" placeholder="Ex: ACME Corp">
+                </div>
+                <div class="form-group">
+                    <label for="tipoConta">Tipo de Conta</label>
+                    <select id="tipoConta">
+                        <option value="Lead">Lead</option>
+                        <option value="Cliente Ativo">Cliente Ativo</option>
+                        <option value="Parceiro">Parceiro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="email">E-mail</label>
+                    <input type="email" id="email" placeholder="joao@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="telefone">Telefone</label>
+                    <input type="tel" id="telefone" placeholder="(11) 99999-9999">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="assunto">Assunto</label>
+                <input type="text" id="assunto" placeholder="Ex: Dúvida sobre faturamento">
+            </div>
+
+            <div class="form-group">
+                <label for="conversa">Conversa / Registro</label>
+                <textarea id="conversa" required placeholder="Digite aqui o resumo do que foi conversado..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Anexos (Prints de Tela)</label>
+                <div class="paste-area" id="pasteArea">
+                    Clique aqui e aperte <strong>Ctrl + V</strong> para colar um print
+                    <img id="preview" class="preview-img" alt="Preview do print">
+                </div>
+            </div>
+
+            <button type="submit" id="btnSalvar">Salvar Registro</button>
+            <button type="button" id="btnCancelar" style="display:none; background-color:#3a3a42; color:#fff; margin-top:5px;">Cancelar Edição / Novo</button>
+        </form>
+    </div>
+
+    <!-- Lista de Pesquisa Abaixo do Formulário -->
+    <div class="card search-section">
+        <h2>Buscar Clientes</h2>
+        <div class="search-box">
+            <input type="text" id="searchBar" placeholder="Pesquise por nome, e-mail ou ID..." oninput="buscarClientes()">
+        </div>
+        <div class="results-list" id="resultsList">
+            <!-- Resultados aparecem aqui dinamicamente -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // IMPORTANTE: Insira a URL do seu Google Apps Script aqui embaixo
+    const WEB_APP_URL = "SUA_URL_DO_GOOGLE_APPS_SCRIPT_AQUI";
+    
+    let imageBase64 = "";
+
+    // Gerenciador de colagem de imagem (Ctrl+V)
+    const pasteArea = document.getElementById('pasteArea');
+    const preview = document.getElementById('preview');
+
+    window.addEventListener('paste', function(e) {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') === 0) {
+                const blob = items[i].getAsFile();
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    imageBase64 = event.target.result;
+                    preview.src = imageBase64;
+                    preview.style.display = 'block';
+                    pasteArea.classList.add('active');
+                    pasteArea.innerHTML = `Print carregado com sucesso! (Aperte Ctrl+V para trocar)<br>`;
+                    pasteArea.appendChild(preview);
+                };
+                reader.readAsDataURL(blob);
+            }
+        }
+    });
+
+    // Envio do formulário (Cadastro ou Atualização)
+    document.getElementById('crmForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnSalvar');
+        btn.innerText = "Enviando dados...";
+        btn.disabled = true;
+
+        const payload = {
+            id: document.getElementById('clientId').value || null,
